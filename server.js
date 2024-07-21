@@ -6,35 +6,41 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
+const PORT = process.env.PORT || 3000;
+
 io.on('connection', (socket) => {
     console.log('a user connected');
 
-    socket.on('create or join', (room) => {
-        console.log(`Received request to create or join room ${room}`);
-        const clients = io.sockets.adapter.rooms.get(room) || new Set();
+    socket.on('create or join', (roomId) => {
+        console.log(`create or join to room ${roomId}`);
 
-        if (clients.size === 0) {
-            socket.join(room);
-            socket.emit('created', room);
-        } else if (clients.size === 1) {
-            socket.join(room);
-            io.to(room).emit('join', room);
-            socket.emit('joined', room);
+        const clients = io.sockets.adapter.rooms[roomId] || { length: 0 };
+        const numClients = clients.length;
+
+        if (numClients === 0) {
+            socket.join(roomId);
+            console.log(`Client ID ${socket.id} created room ${roomId}`);
+            socket.emit('created', roomId);
+        } else if (numClients === 1) {
+            console.log(`Client ID ${socket.id} joined room ${roomId}`);
+            io.sockets.in(roomId).emit('join', roomId);
+            socket.join(roomId);
+            socket.emit('joined', roomId);
         } else {
-            socket.emit('full', room);
+            socket.emit('full', roomId);
         }
     });
 
     socket.on('message', (message) => {
         console.log('Client said: ', message);
-        socket.broadcast.emit('message', message);
+        io.sockets.in(message.roomId).emit('message', message);
     });
 
     socket.on('disconnect', () => {
-        console.log('a user disconnected');
+        console.log('user disconnected');
     });
 });
 
-server.listen(3000, () => {
-    console.log('server listening on port 3000');
+server.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
