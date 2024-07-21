@@ -7,46 +7,34 @@ const server = http.createServer(app);
 const io = socketIo(server);
 
 io.on('connection', (socket) => {
-    console.log('a user connected: ' + socket.id);
+    console.log('a user connected');
 
-    socket.on('create-room', (data) => {
-        const { callId, receiverId, offer } = data;
-        console.log('create-room:', data);
-        socket.join(callId);
-        socket.broadcast.to(receiverId).emit('offer', { offer });
+    socket.on('create or join', (room) => {
+        console.log(`Received request to create or join room ${room}`);
+        const clients = io.sockets.adapter.rooms.get(room) || new Set();
+
+        if (clients.size === 0) {
+            socket.join(room);
+            socket.emit('created', room);
+        } else if (clients.size === 1) {
+            socket.join(room);
+            io.to(room).emit('join', room);
+            socket.emit('joined', room);
+        } else {
+            socket.emit('full', room);
+        }
     });
 
-    socket.on('join-room', (data) => {
-        const { callId } = data;
-        console.log('join-room:', data);
-        socket.join(callId);
-        io.to(callId).emit('join', { callId });
-    });
-
-    socket.on('answer', (data) => {
-        const { answer, callId } = data;
-        console.log('answer:', data);
-        socket.broadcast.to(callId).emit('answer', { answer });
-    });
-
-    socket.on('ice-candidate', (data) => {
-        const { candidate, callId } = data;
-        console.log('ice-candidate:', data);
-        socket.broadcast.to(callId).emit('ice-candidate', { candidate });
-    });
-
-    socket.on('hangup', (data) => {
-        const { callId } = data;
-        console.log('hangup:', data);
-        io.to(callId).emit('hangup');
-        socket.leave(callId);
+    socket.on('message', (message) => {
+        console.log('Client said: ', message);
+        socket.broadcast.emit('message', message);
     });
 
     socket.on('disconnect', () => {
-        console.log('user disconnected: ' + socket.id);
+        console.log('a user disconnected');
     });
 });
 
 server.listen(3000, () => {
-    console.log('listening on *:3000');
+    console.log('server listening on port 3000');
 });
