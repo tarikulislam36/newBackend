@@ -4,53 +4,49 @@ const socketIo = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
-    cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
-    }
-});
-
-const PORT = 3000;
+const io = socketIo(server);
 
 io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
+    console.log('a user connected: ' + socket.id);
 
-    socket.on('create or join', (room) => {
-        console.log(`Request to create or join room: ${room}`);
-        const clients = io.sockets.adapter.rooms.get(room) || new Set();
-        const numClients = clients.size;
-
-        if (numClients === 0) {
-            socket.join(room);
-            socket.emit('created', room);
-            console.log(`Room ${room} created by ${socket.id}`);
-        } else if (numClients === 1) {
-            socket.join(room);
-            socket.emit('joined', room);
-            io.to(room).emit('ready');
-            console.log(`${socket.id} joined room ${room}`);
-        } else {
-            socket.emit('full', room);
-            console.log(`Room ${room} is full`);
-        }
+    socket.on('create-room', (data) => {
+        const { callId, receiverId, offer } = data;
+        console.log('create-room:', data);
+        socket.join(callId);
+        socket.broadcast.to(receiverId).emit('offer', { offer });
     });
 
-    socket.on('message', (message) => {
-        console.log(`Message from ${socket.id}:`, message);
-        socket.to(message.room).emit('message', message);
+    socket.on('join-room', (data) => {
+        const { callId } = data;
+        console.log('join-room:', data);
+        socket.join(callId);
+        io.to(callId).emit('join', { callId });
+    });
+
+    socket.on('answer', (data) => {
+        const { answer, callId } = data;
+        console.log('answer:', data);
+        socket.broadcast.to(callId).emit('answer', { answer });
+    });
+
+    socket.on('ice-candidate', (data) => {
+        const { candidate, callId } = data;
+        console.log('ice-candidate:', data);
+        socket.broadcast.to(callId).emit('ice-candidate', { candidate });
+    });
+
+    socket.on('hangup', (data) => {
+        const { callId } = data;
+        console.log('hangup:', data);
+        io.to(callId).emit('hangup');
+        socket.leave(callId);
     });
 
     socket.on('disconnect', () => {
-        console.log('A user disconnected:', socket.id);
+        console.log('user disconnected: ' + socket.id);
     });
 });
 
-app.get('/test', (req, res) => {
-    res.send('Test request successful!');
-    console.log('Test request received');
-});
-
-server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+server.listen(3000, () => {
+    console.log('listening on *:3000');
 });
